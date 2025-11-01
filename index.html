@@ -25,6 +25,7 @@
     .app-container {
       display: flex;
       height: 100vh;
+      position: relative;
     }
 
     /* 側邊欄樣式 */
@@ -35,6 +36,12 @@
       display: flex;
       flex-direction: column;
       box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+
+    .sidebar.collapsed {
+      transform: translateX(-100%);
     }
 
     .sidebar-header {
@@ -46,6 +53,30 @@
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-title {
+      flex: 1;
+    }
+
+    .sidebar-close {
+      display: none;
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      border-radius: 4px;
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.3s;
+    }
+
+    .sidebar-close:hover {
+      background: rgba(255, 255, 255, 0.3);
     }
 
     .el-menu {
@@ -78,6 +109,77 @@
       flex-direction: column;
       overflow: hidden;
       background: #f5f7fa;
+    }
+
+    /* 頂部工具列 */
+    .top-bar {
+      height: 60px;
+      background: white;
+      border-bottom: 1px solid #e4e7ed;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+
+    .menu-toggle {
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: #ecf5ff;
+      color: #409EFF;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .menu-toggle:hover {
+      background: #409EFF;
+      color: white;
+    }
+
+    .page-title {
+      flex: 1;
+      font-size: 18px;
+      font-weight: 600;
+      color: #303133;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: #f5f7fa;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .user-info:hover {
+      background: #ecf5ff;
+    }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+    }
+
+    .user-name {
+      font-size: 14px;
+      color: #606266;
     }
 
     .main-content {
@@ -203,15 +305,117 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* 遮罩層 */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .sidebar-overlay.show {
+      display: block;
+      opacity: 1;
+    }
+
+    /* 響應式設計 */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        z-index: 1001;
+      }
+
+      .sidebar.collapsed {
+        transform: translateX(-100%);
+      }
+
+      .sidebar-close {
+        display: block;
+      }
+
+      .top-bar {
+        padding: 0 12px;
+      }
+
+      .user-name {
+        display: none;
+      }
+
+      .welcome-header h1 {
+        font-size: 24px;
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .iframe-container {
+        padding: 12px;
+      }
+
+      .iframe-wrapper {
+        padding: 16px;
+      }
+    }
+
+    @media (min-width: 769px) {
+      /* 桌面版側邊欄收合時的樣式 */
+      .sidebar.collapsed {
+        width: 0;
+        transform: none;
+      }
+      
+      .sidebar.collapsed .sidebar-header,
+      .sidebar.collapsed .el-menu {
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .sidebar {
+        width: 80%;
+        max-width: 280px;
+      }
+
+      .top-bar {
+        height: 56px;
+      }
+
+      .page-title {
+        font-size: 16px;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="app">
     <div class="app-container">
       
+      <!-- 側邊欄遮罩（手機版） -->
+      <div 
+        class="sidebar-overlay" 
+        :class="{ show: !sidebarCollapsed }"
+        @click="toggleSidebar">
+      </div>
+
       <!-- 側邊欄 -->
-      <div class="sidebar">
-        <div class="sidebar-header">🏍️ 機車行管理系統</div>
+      <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-header">
+          <span class="sidebar-title">🏍️ 機車行管理系統</span>
+          <button class="sidebar-close" @click="toggleSidebar">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
         <el-menu 
           :default-active="activeMenu"
           background-color="#fff" 
@@ -251,6 +455,21 @@
       
       <!-- 主內容區 -->
       <div class="main">
+        <!-- 頂部工具列 -->
+        <div class="top-bar">
+          <button class="menu-toggle" @click="toggleSidebar">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <div class="page-title">{{ pageTitle }}</div>
+          <div class="user-info">
+            <div class="user-avatar">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <span class="user-name">管理員</span>
+          </div>
+        </div>
+
+        <!-- 主內容 -->
         <div class="main-content">
           <!-- 載入中提示 -->
           <div v-if="loading" class="loading-overlay">
@@ -268,7 +487,6 @@
             </div>
             
             <div class="feature-grid">
-              
               <div class="feature-card" @click="handleMenuSelect('customers')">
                 <div class="feature-icon">👤</div>
                 <div class="feature-title">客戶管理</div>
@@ -335,7 +553,22 @@
         return {
           activeMenu: 'home',
           currentPageUrl: '',
-          loading: false
+          loading: false,
+          sidebarCollapsed: window.innerWidth <= 768 // 手機版預設收合
+        }
+      },
+      computed: {
+        pageTitle() {
+          const titles = {
+            'home': '首頁',
+            'customers': '客戶管理',
+            'reservation': '線上預約',
+            'inventory': '庫存管理',
+            'reports': '收支報表',
+            'staff': '員工管理',
+            'discounts': '優惠管理'
+          }
+          return titles[this.activeMenu] || '機車行管理系統'
         }
       },
       methods: {
@@ -344,6 +577,10 @@
           if (index === 'home') {
             this.activeMenu = 'home';
             this.currentPageUrl = '';
+            // 手機版點擊後收合側邊欄
+            if (window.innerWidth <= 768) {
+              this.sidebarCollapsed = true;
+            }
             return;
           }
           
@@ -353,30 +590,53 @@
           
           // 設定 iframe 來源
           this.currentPageUrl = `pages/${index}.html`;
+          
+          // 手機版點擊後收合側邊欄
+          if (window.innerWidth <= 768) {
+            this.sidebarCollapsed = true;
+          }
+        },
+        
+        toggleSidebar() {
+          this.sidebarCollapsed = !this.sidebarCollapsed;
         },
         
         handleFrameLoad() {
           // iframe 載入完成，隱藏載入提示
           this.loading = false;
           
-          // 檢查是否載入失敗
-          try {
+          // 自動調整 iframe 高度
+          this.$nextTick(() => {
             const frame = document.getElementById('pageFrame');
-            if (frame && frame.contentDocument) {
-              // 成功載入
-              console.log('頁面載入成功:', this.currentPageUrl);
+            if (frame && frame.contentWindow) {
+              try {
+                const contentHeight = frame.contentWindow.document.body.scrollHeight;
+                frame.style.height = contentHeight + 'px';
+              } catch (e) {
+                // 跨域問題，使用預設高度
+                frame.style.height = '100%';
+              }
             }
-          } catch (e) {
-            console.error('頁面載入錯誤:', e);
-          }
+          });
+        },
+        
+        handleResize() {
+          // 視窗大小改變時的處理（不自動改變狀態）
+          // 移除自動收合邏輯，讓使用者自行控制
         }
       },
       mounted() {
         console.log('機車行管理系統已啟動');
-        console.log('如果無法載入頁面，請確認：');
-        console.log('1. pages 資料夾與 index.html 在同一目錄');
-        console.log('2. HTML 檔案名稱正確（例如：jobs.html）');
-        console.log('3. 使用本地伺服器開啟（推薦使用 python -m http.server）');
+        
+        // 監聽視窗大小變化
+        window.addEventListener('resize', this.handleResize);
+        
+        // 初始化側邊欄狀態（手機版預設收合，桌面版預設展開）
+        this.sidebarCollapsed = window.innerWidth <= 768;
+      },
+      beforeUnmount() {
+        // 移除監聽器
+        window.removeEventListener('resize', this.handleResize);
       }
     }).use(ElementPlus).mount('#app');
   </script>

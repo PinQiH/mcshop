@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>線上預約</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="page-container">
+      <!-- 頁面標題 -->
+      <div class="page-header">
+        <h2>📅 線上預約系統</h2>
+        <p class="page-description">管理客戶預約、安排維修時段、避免時間衝突</p>
+      </div>
+
+      <!-- 統計卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card primary">
+          <div class="stat-icon">
+            <i class="fa-solid fa-calendar-check"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">總預約數</div>
+            <div class="stat-value">{{ reservations.length }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card warning">
+          <div class="stat-icon">
+            <i class="fa-solid fa-clock"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">本月預約</div>
+            <div class="stat-value">{{ monthReservations }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card success">
+          <div class="stat-icon">
+            <i class="fa-solid fa-calendar-day"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">今日預約</div>
+            <div class="stat-value">{{ todayReservations }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card info">
+          <div class="stat-icon">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">預約客戶</div>
+            <div class="stat-value">{{ uniqueCustomers }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 行事曆卡片 -->
+      <div class="card">
+        <div class="calendar-header">
+          <div class="calendar-nav">
+            <el-button @click="prevMonth" circle><i class="fa-solid fa-chevron-left"></i></el-button>
+            <h3 class="calendar-title">
+              <i class="fa-solid fa-calendar"></i>
+              {{ currentYear }} 年 {{ currentMonth }} 月
+            </h3>
+            <el-button @click="nextMonth" circle><i class="fa-solid fa-chevron-right"></i></el-button>
+          </div>
+          <div class="calendar-actions">
+            <el-button type="primary" @click="openAddDialog">
+              <i class="fa-solid fa-plus"></i> 新增預約
+            </el-button>
+            <el-button @click="goToToday">回到今天
+            </el-button>
+          </div>
+        </div>
+
+        <div class="calendar-grid">
+          <div class="calendar-day-header">日</div>
+          <div class="calendar-day-header">一</div>
+          <div class="calendar-day-header">二</div>
+          <div class="calendar-day-header">三</div>
+          <div class="calendar-day-header">四</div>
+          <div class="calendar-day-header">五</div>
+          <div class="calendar-day-header">六</div>
+
+          <div 
+            v-for="day in calendarDays" 
+            :key="day.id"
+            :class="getDayClass(day)"
+            @click="showDayReservations(day)"
+          >
+            <div class="day-number">{{ day.day }}</div>
+            <div class="day-events">
+              <div 
+                v-for="event in day.events.slice(0, 3)" 
+                :key="event.id" 
+                class="day-event"
+                :title="`${event.time} ${event.customer} - ${event.item}`">
+                <i class="fa-solid fa-clock"></i>
+                {{ event.time }} {{ event.customer }}
+              </div>
+              <div v-if="day.events.length > 3" class="day-event-more">
+                +{{ day.events.length - 3 }} 更多
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 快速預約列表 -->
+      <div class="card mt-20">
+        <div class="card-header">
+          <i class="fa-solid fa-list"></i> 近期預約列表
+        </div>
+        <div class="card-body">
+          <el-table :data="upcomingReservations" stripe>
+            <el-table-column prop="date" label="日期" width="120"></el-table-column>
+            <el-table-column prop="time" label="時間" width="100"></el-table-column>
+            <el-table-column prop="customer" label="客戶" width="120"></el-table-column>
+            <el-table-column prop="plate" label="車牌" width="120"></el-table-column>
+            <el-table-column prop="item" label="維修項目"></el-table-column>
+            <el-table-column label="操作" width="120" align="center">
+              <template #default="scope">
+                <el-button 
+                  type="danger" 
+                  size="small"
+                  @click="deleteReservation(scope.row)">
+                  <i class="fa-solid fa-trash"></i>
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 查看當天預約對話框 -->
+    <el-dialog 
+      v-model="showDayDialog" 
+      :title="selectedDayTitle"
+      width="600px">
+      <div v-if="dailyReservations.length === 0" class="empty-state">
+        <i class="fa-solid fa-calendar-xmark"></i>
+        <p>當天沒有預約</p>
+      </div>
+      <el-table v-else :data="dailyReservations" border stripe>
+        <el-table-column prop="time" label="時間" width="100"></el-table-column>
+        <el-table-column prop="customer" label="客戶" width="120"></el-table-column>
+        <el-table-column prop="plate" label="車牌" width="120"></el-table-column>
+        <el-table-column prop="item" label="維修項目"></el-table-column>
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="scope">
+            <el-button 
+              type="danger" 
+              size="small"
+              text
+              @click="deleteReservation(scope.row)">
+              <i class="fa-solid fa-trash"></i>
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <!-- 新增預約對話框 -->
+    <el-dialog 
+      v-model="showAddDialog" 
+      title="新增預約" 
+      width="500px">
+      <el-form :model="newReservation" label-width="90px">
+        <el-form-item label="預約日期" required>
+          <el-date-picker 
+            v-model="newReservation.date" 
+            type="date" 
+            placeholder="選擇日期" 
+            value-format="YYYY/MM/DD"
+            style="width: 100%;">
+          </el-date-picker>
+        </el-form-item>
+        <el-form-item label="預約時間" required>
+          <el-time-picker 
+            v-model="newReservation.time" 
+            placeholder="選擇時間" 
+            value-format="HH:mm"
+            :disabled-hours="disabledHours"
+            style="width: 100%;">
+          </el-time-picker>
+        </el-form-item>
+        <el-form-item label="客戶姓名" required>
+          <el-input 
+            v-model="newReservation.customer"
+            placeholder="請輸入客戶姓名">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="車牌號碼" required>
+          <el-input 
+            v-model="newReservation.plate"
+            placeholder="ABC-1234">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="維修項目" required>
+          <el-input 
+            v-model="newReservation.item"
+            placeholder="請輸入維修項目">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="聯絡電話">
+          <el-input 
+            v-model="newReservation.phone"
+            placeholder="0912-345-678">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="備註">
+          <el-input 
+            v-model="newReservation.note"
+            type="textarea"
+            :rows="3"
+            placeholder="其他需要注意的事項">
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddDialog = false">取消</el-button>
+        <el-button type="primary" @click="addReservation">
+          <i class="fa-solid fa-check"></i> 確認新增
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script>
+    const { createApp, ref, computed } = Vue
+
+    createApp({
+      setup() {
+        const reservations = ref([
+          { id: 1, date: '2025/10/28', time: '09:00', customer: '王小明', plate: 'ABC-1234', item: '換機油', phone: '0912-345-678' },
+          { id: 2, date: '2025/10/28', time: '11:00', customer: '李大華', plate: 'DEF-5678', item: '煞車皮更換', phone: '0923-456-789' },
+          { id: 3, date: '2025/10/29', time: '10:00', customer: '陳小美', plate: 'XYZ-9999', item: '引擎檢修', phone: '0934-567-890' },
+          { id: 4, date: '2025/10/30', time: '14:00', customer: '張三', plate: 'GHI-1111', item: '定期保養', phone: '0945-678-901' },
+          { id: 5, date: '2025/11/01', time: '09:30', customer: '林小明', plate: 'JKL-2222', item: '輪胎更換', phone: '0956-789-012' },
+        ])
+
+        const currentYear = ref(new Date().getFullYear())
+        const currentMonth = ref(new Date().getMonth() + 1)
+        const showDayDialog = ref(false)
+        const selectedDay = ref('')
+        const dailyReservations = ref([])
+
+        const showAddDialog = ref(false)
+        const newReservation = ref({
+          date: '',
+          time: '',
+          customer: '',
+          plate: '',
+          item: '',
+          phone: '',
+          note: ''
+        })
+
+        // 計算本月預約數
+        const monthReservations = computed(() => {
+          return reservations.value.filter(r => {
+            const [year, month] = r.date.split('/')
+            return parseInt(year) === currentYear.value && parseInt(month) === currentMonth.value
+          }).length
+        })
+
+        // 計算今日預約數
+        const todayReservations = computed(() => {
+          const today = new Date()
+          const todayStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`
+          return reservations.value.filter(r => r.date === todayStr).length
+        })
+
+        // 計算唯一客戶數
+        const uniqueCustomers = computed(() => {
+          const customers = new Set(reservations.value.map(r => r.customer))
+          return customers.size
+        })
+
+        // 近期預約（未來7天）
+        const upcomingReservations = computed(() => {
+          const today = new Date()
+          const future = new Date()
+          future.setDate(today.getDate() + 7)
+          
+          return reservations.value
+            .filter(r => {
+              const [year, month, day] = r.date.split('/').map(Number)
+              const rDate = new Date(year, month - 1, day)
+              return rDate >= today && rDate <= future
+            })
+            .sort((a, b) => {
+              if (a.date === b.date) {
+                return a.time.localeCompare(b.time)
+              }
+              return a.date.localeCompare(b.date)
+            })
+        })
+
+        // 生成行事曆天數
+        const calendarDays = computed(() => {
+          const year = currentYear.value
+          const month = currentMonth.value
+          const firstDay = new Date(year, month - 1, 1)
+          const lastDay = new Date(year, month, 0)
+          const daysInMonth = lastDay.getDate()
+          const startWeekday = firstDay.getDay()
+
+          const days = []
+          let dayId = 0
+
+          // 上個月的天數
+          const prevMonthLastDay = new Date(year, month - 1, 0).getDate()
+          const prevMonth = month === 1 ? 12 : month - 1
+          const prevYear = month === 1 ? year - 1 : year
+          
+          for (let i = startWeekday - 1; i >= 0; i--) {
+            const day = prevMonthLastDay - i
+            days.push({
+              id: dayId++,
+              day,
+              isCurrentMonth: false,
+              isToday: false,
+              date: `${prevYear}/${String(prevMonth).padStart(2, '0')}/${String(day).padStart(2, '0')}`,
+              events: []
+            })
+          }
+
+          // 當月天數
+          const today = new Date()
+          for (let i = 1; i <= daysInMonth; i++) {
+            const dateStr = `${year}/${String(month).padStart(2, '0')}/${String(i).padStart(2, '0')}`
+            const isToday = year === today.getFullYear() && month === today.getMonth() + 1 && i === today.getDate()
+            const dayEvents = reservations.value.filter(r => r.date === dateStr)
+
+            days.push({
+              id: dayId++,
+              day: i,
+              isCurrentMonth: true,
+              isToday,
+              date: dateStr,
+              events: dayEvents
+            })
+          }
+
+          // 下個月的天數
+          const remainingDays = 42 - days.length
+          const nextMonth = month === 12 ? 1 : month + 1
+          const nextYear = month === 12 ? year + 1 : year
+          
+          for (let i = 1; i <= remainingDays; i++) {
+            days.push({
+              id: dayId++,
+              day: i,
+              isCurrentMonth: false,
+              isToday: false,
+              date: `${nextYear}/${String(nextMonth).padStart(2, '0')}/${String(i).padStart(2, '0')}`,
+              events: []
+            })
+          }
+
+          return days
+        })
+
+        // 選中的日期標題
+        const selectedDayTitle = computed(() => {
+          if (!selectedDay.value) return ''
+          const [year, month, day] = selectedDay.value.split('/')
+          return `${year}年${month}月${day}日 的預約`
+        })
+
+        // 取得日期樣式類別
+        const getDayClass = (day) => {
+          return {
+            'calendar-day': true,
+            'other-month': !day.isCurrentMonth,
+            'today': day.isToday,
+            'has-events': day.events.length > 0
+          }
+        }
+
+        // 上個月
+        const prevMonth = () => {
+          if (currentMonth.value === 1) {
+            currentMonth.value = 12
+            currentYear.value--
+          } else {
+            currentMonth.value--
+          }
+        }
+
+        // 下個月
+        const nextMonth = () => {
+          if (currentMonth.value === 12) {
+            currentMonth.value = 1
+            currentYear.value++
+          } else {
+            currentMonth.value++
+          }
+        }
+
+        // 回到今天
+        const goToToday = () => {
+          const today = new Date()
+          currentYear.value = today.getFullYear()
+          currentMonth.value = today.getMonth() + 1
+        }
+
+        // 顯示當天預約
+        const showDayReservations = (day) => {
+          if (!day.isCurrentMonth) return
+          selectedDay.value = day.date
+          dailyReservations.value = reservations.value.filter(r => r.date === day.date)
+          showDayDialog.value = true
+        }
+
+        // 打開新增對話框
+        const openAddDialog = () => {
+          const today = new Date()
+          const todayStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`
+          
+          newReservation.value = { 
+            date: todayStr, 
+            time: '09:00', 
+            customer: '', 
+            plate: '', 
+            item: '',
+            phone: '',
+            note: ''
+          }
+          showAddDialog.value = true
+        }
+
+        // 新增預約
+        const addReservation = () => {
+          const r = newReservation.value
+          if (!r.date || !r.time || !r.customer || !r.plate || !r.item) {
+            ElementPlus.ElMessage.warning('請完整填寫必填欄位')
+            return
+          }
+          
+          const newId = reservations.value.length > 0 
+            ? Math.max(...reservations.value.map(r => r.id)) + 1 
+            : 1
+          
+          reservations.value.push({ ...r, id: newId })
+          showAddDialog.value = false
+          ElementPlus.ElMessage.success('預約已新增')
+        }
+
+        // 刪除預約
+        const deleteReservation = (reservation) => {
+          ElementPlus.ElMessageBox.confirm(
+            `確定要刪除「${reservation.customer}」在 ${reservation.date} ${reservation.time} 的預約嗎？`,
+            '確認刪除',
+            {
+              confirmButtonText: '確定',
+              cancelButtonText: '取消',
+              type: 'warning',
+            }
+          ).then(() => {
+            const index = reservations.value.findIndex(r => r.id === reservation.id)
+            if (index !== -1) {
+              reservations.value.splice(index, 1)
+              dailyReservations.value = dailyReservations.value.filter(r => r.id !== reservation.id)
+              ElementPlus.ElMessage.success('已刪除預約')
+            }
+          }).catch(() => {})
+        }
+
+        // 限制營業時間（假設 9:00-18:00）
+        const disabledHours = () => {
+          const hours = []
+          for (let i = 0; i < 9; i++) hours.push(i)
+          for (let i = 18; i < 24; i++) hours.push(i)
+          return hours
+        }
+
+        return {
+          reservations,
+          currentYear,
+          currentMonth,
+          calendarDays,
+          monthReservations,
+          todayReservations,
+          uniqueCustomers,
+          upcomingReservations,
+          prevMonth,
+          nextMonth,
+          goToToday,
+          showDayDialog,
+          selectedDay,
+          selectedDayTitle,
+          dailyReservations,
+          showDayReservations,
+          getDayClass,
+          showAddDialog,
+          newReservation,
+          openAddDialog,
+          addReservation,
+          deleteReservation,
+          disabledHours,
+        }
+      }
+    }).use(ElementPlus).mount('#app')
+  </script>
+
+  <style>
+/* 行事曆頭部 */
+.calendar-header {
+  padding: 20px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.calendar-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 行事曆網格 */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #e4e7ed;
+  border: 1px solid #e4e7ed;
+}
+
+.calendar-day-header {
+  background: #f5f7fa;
+  padding: 12px 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #606266;
+  font-size: 14px;
+}
+
+.calendar-day {
+  min-height: 100px;
+  padding: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.calendar-day:hover {
+  background: #ecf5ff;
+}
+
+.calendar-day.other-month {
+  background: #fafafa;
+  opacity: 0.5;
+}
+
+.calendar-day.today {
+  background: #ecf5ff;
+  border: 2px solid #409EFF;
+}
+
+.calendar-day.has-events {
+  background: #f0f9ff;
+}
+
+.day-number {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+  margin-bottom: 6px;
+}
+
+.calendar-day.today .day-number {
+  color: #409EFF;
+  font-size: 16px;
+}
+
+.day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.day-event {
+  background: #409EFF;
+  color: white;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 3px 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.day-event i {
+  font-size: 10px;
+}
+
+.day-event-more {
+  font-size: 11px;
+  color: #909399;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+/* 響應式 */
+@media (max-width: 768px) {
+  .calendar-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .calendar-nav {
+    justify-content: center;
+  }
+
+  .calendar-actions {
+    flex-direction: column;
+  }
+
+  .calendar-day {
+    min-height: 80px;
+    padding: 4px;
+  }
+
+  .day-number {
+    font-size: 12px;
+  }
+
+  .day-event {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+}
+  </style>
+</body>
+</html>

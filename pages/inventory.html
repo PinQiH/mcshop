@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>庫存管理</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="page-container">
+      <!-- 頁面標題 -->
+      <div class="page-header">
+        <h2>🧰 庫存管理</h2>
+        <p class="page-description">管理零件庫存、設定安全庫存、追蹤進出貨記錄</p>
+      </div>
+
+      <!-- 統計卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card primary">
+          <div class="stat-icon">
+            <i class="fa-solid fa-boxes-stacked"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">總項目數</div>
+            <div class="stat-value">{{ inventory.length }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card success">
+          <div class="stat-icon">
+            <i class="fa-solid fa-check-circle"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">庫存充足</div>
+            <div class="stat-value">{{ sufficientStock }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card danger">
+          <div class="stat-icon">
+            <i class="fa-solid fa-exclamation-triangle"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">庫存不足</div>
+            <div class="stat-value">{{ lowStock }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card warning">
+          <div class="stat-icon">
+            <i class="fa-solid fa-dollar-sign"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">總價值</div>
+            <div class="stat-value">{{ totalValue.toLocaleString() }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 庫存不足警告 -->
+      <div v-if="lowStockItems.length > 0" class="info-box warning mb-20">
+        <i class="fa-solid fa-exclamation-triangle"></i>
+        <div class="info-box-content">
+          <div class="info-box-title">庫存警告</div>
+          <div class="info-box-text">
+            以下 {{ lowStockItems.length }} 項零件庫存不足，請儘速補貨：
+            <strong>{{ lowStockItems.map(i => i.name).join('、') }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- 搜尋和篩選 -->
+      <div class="card mb-20">
+        <div class="card-body">
+          <div class="search-bar">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜尋零件名稱或編號"
+              clearable
+              style="width: 250px;">
+              <template #prefix>
+                <i class="fa-solid fa-search"></i>
+              </template>
+            </el-input>
+            
+            <el-select 
+              v-model="filterCategory" 
+              placeholder="全部分類" 
+              clearable
+              style="width: 150px;">
+              <el-option label="全部分類" value=""></el-option>
+              <el-option 
+                v-for="cat in categories" 
+                :key="cat" 
+                :label="cat" 
+                :value="cat">
+              </el-option>
+            </el-select>
+
+            <el-select 
+              v-model="filterStatus" 
+              placeholder="庫存狀態" 
+              clearable
+              style="width: 150px;">
+              <el-option label="全部狀態" value=""></el-option>
+              <el-option label="庫存充足" value="sufficient"></el-option>
+              <el-option label="庫存不足" value="low"></el-option>
+            </el-select>
+
+            <div style="flex: 1;"></div>
+
+            <el-button type="primary" @click="openAddDialog">
+              <i class="fa-solid fa-plus"></i> 新增零件
+            </el-button>
+            <el-button @click="exportInventory">
+              <i class="fa-solid fa-download"></i> 匯出Excel
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 庫存表格 -->
+      <div class="card">
+        <div class="card-body" style="padding: 0;">
+          <el-table 
+            :data="filteredInventory" 
+            border 
+            stripe
+            :default-sort="{ prop: 'stock', order: 'ascending' }">
+            <el-table-column prop="code" label="編號" width="130">
+              <template #default="scope">
+                <el-tag size="small">{{ scope.row.code }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="name" label="零件名稱" min-width="180">
+              <template #default="scope">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-screwdriver-wrench" style="color: #909399;"></i>
+                  <strong>{{ scope.row.name }}</strong>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="category" label="分類" width="120">
+              <template #default="scope">
+                <el-tag :type="getCategoryType(scope.row.category)" size="small">
+                  {{ scope.row.category }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="stock" label="庫存數量" width="120" align="center" sortable>
+              <template #default="scope">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                  <span 
+                    :style="{ 
+                      color: scope.row.stock <= scope.row.minStock ? '#f56c6c' : '#67c23a',
+                      fontSize: '18px',
+                      fontWeight: 'bold'
+                    }">
+                    {{ scope.row.stock }}
+                  </span>
+                  <el-progress 
+                    :percentage="getStockPercentage(scope.row)" 
+                    :color="getProgressColor(scope.row)"
+                    :show-text="false"
+                    style="width: 80px;">
+                  </el-progress>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="minStock" label="安全庫存" width="110" align="center">
+              <template #default="scope">
+                <span style="color: #909399;">{{ scope.row.minStock }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="price" label="單價" width="120" align="right">
+              <template #default="scope">
+                <span style="color: #409EFF; font-weight: bold;">
+                  ${{ scope.row.price.toLocaleString() }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="總值" width="130" align="right">
+              <template #default="scope">
+                <span style="color: #67c23a; font-weight: bold;">
+                  ${{ (scope.row.stock * scope.row.price).toLocaleString() }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="狀態" width="100" align="center">
+              <template #default="scope">
+                <el-tag 
+                  :type="scope.row.stock <= scope.row.minStock ? 'danger' : 'success'"
+                  size="small">
+                  <i :class="scope.row.stock <= scope.row.minStock ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-check'"></i>
+                  {{ scope.row.stock <= scope.row.minStock ? '不足' : '充足' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" align="center" fixed="right">
+              <template #default="scope">
+                <el-button 
+                  size="small" 
+                  @click="adjustStock(scope.row)">
+                  <i class="fa-solid fa-boxes-packing"></i> 調整
+                </el-button>
+                <el-button 
+                  size="small" 
+                  @click="editItem(scope.row)">
+                  <i class="fa-solid fa-edit"></i>
+                </el-button>
+                <el-button 
+                  size="small" 
+                  type="danger" 
+                  @click="deleteItem(scope.row)">
+                  <i class="fa-solid fa-trash"></i>
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+
+      <!-- 最近異動記錄 -->
+      <div class="card mt-20">
+        <div class="card-header">
+          <i class="fa-solid fa-clock-rotate-left"></i> 最近異動記錄
+        </div>
+        <div class="card-body">
+          <div class="timeline">
+            <div class="timeline-item" v-for="log in stockLogs" :key="log.id">
+              <div class="timeline-dot" :style="{ borderColor: log.type === 'in' ? '#67c23a' : '#f56c6c' }"></div>
+              <div class="timeline-content">
+                <div class="timeline-title">
+                  {{ log.itemName }}
+                  <el-tag :type="log.type === 'in' ? 'success' : 'danger'" size="small" style="margin-left: 8px;">
+                    {{ log.type === 'in' ? '入庫' : '出庫' }}
+                  </el-tag>
+                </div>
+                <div class="timeline-time">{{ log.date }} {{ log.time }}</div>
+                <div class="timeline-desc">
+                  數量：{{ log.type === 'in' ? '+' : '-' }}{{ log.quantity }}，
+                  操作人：{{ log.operator }}
+                  <span v-if="log.note">，備註：{{ log.note }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增/編輯零件對話框 -->
+    <el-dialog 
+      v-model="showDialog" 
+      :title="dialogTitle"
+      width="500px">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="零件編號" required>
+          <el-input 
+            v-model="form.code"
+            placeholder="例如：OIL-001">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="零件名稱" required>
+          <el-input 
+            v-model="form.name"
+            placeholder="請輸入零件名稱">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="分類" required>
+          <el-select 
+            v-model="form.category" 
+            placeholder="選擇分類"
+            style="width: 100%;"
+            allow-create
+            filterable>
+            <el-option 
+              v-for="cat in categories" 
+              :key="cat" 
+              :label="cat" 
+              :value="cat">
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="庫存數量" required>
+          <el-input-number 
+            v-model="form.stock" 
+            :min="0"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="安全庫存" required>
+          <el-input-number 
+            v-model="form.minStock" 
+            :min="0"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="單價 (NT$)" required>
+          <el-input-number 
+            v-model="form.price" 
+            :min="0" 
+            :step="10"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="供應商">
+          <el-input 
+            v-model="form.supplier"
+            placeholder="供應商名稱（選填）">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="備註">
+          <el-input 
+            v-model="form.note"
+            type="textarea"
+            :rows="2"
+            placeholder="其他說明（選填）">
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveItem">
+          <i class="fa-solid fa-check"></i> 確認儲存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 調整庫存對話框 -->
+    <el-dialog 
+      v-model="showAdjustDialog" 
+      title="調整庫存"
+      width="450px">
+      <div v-if="adjustingItem" style="margin-bottom: 20px;">
+        <div class="info-box info">
+          <i class="fa-solid fa-box"></i>
+          <div class="info-box-content">
+            <div class="info-box-title">{{ adjustingItem.name }}</div>
+            <div class="info-box-text">
+              當前庫存：<strong>{{ adjustingItem.stock }}</strong> 個
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <el-form label-width="100px">
+        <el-form-item label="異動類型" required>
+          <el-radio-group v-model="adjustForm.type">
+            <el-radio-button label="in">
+              <i class="fa-solid fa-arrow-down"></i> 入庫
+            </el-radio-button>
+            <el-radio-button label="out">
+              <i class="fa-solid fa-arrow-up"></i> 出庫
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="異動數量" required>
+          <el-input-number 
+            v-model="adjustForm.quantity" 
+            :min="1"
+            :max="adjustForm.type === 'out' ? adjustingItem?.stock : 999"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="操作人" required>
+          <el-input 
+            v-model="adjustForm.operator"
+            placeholder="請輸入操作人姓名">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="備註">
+          <el-input 
+            v-model="adjustForm.note"
+            type="textarea"
+            :rows="2"
+            placeholder="異動原因或說明">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="預覽結果">
+          <div class="calc-result">
+            <div>
+              異動後庫存：
+              <strong :style="{ color: getNewStock() <= adjustingItem?.minStock ? '#f56c6c' : '#67c23a' }">
+                {{ getNewStock() }} 個
+              </strong>
+            </div>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAdjustDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveAdjustment">
+          <i class="fa-solid fa-check"></i> 確認調整
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script>
+    const { createApp, ref, computed } = Vue
+
+    createApp({
+      setup() {
+        const inventory = ref([
+          { id: 1, code: 'OIL-001', name: '機油', category: '耗材', stock: 25, minStock: 10, price: 250, supplier: '中油', note: '' },
+          { id: 2, code: 'BRK-002', name: '煞車皮', category: '零件', stock: 3, minStock: 5, price: 400, supplier: '台灣零件', note: '前輪專用' },
+          { id: 3, code: 'FLT-003', name: '空氣濾芯', category: '耗材', stock: 20, minStock: 10, price: 180, supplier: '', note: '' },
+          { id: 4, code: 'TIR-004', name: '輪胎', category: '零件', stock: 8, minStock: 4, price: 1200, supplier: '正新輪胎', note: '' },
+          { id: 5, code: 'BAT-005', name: '電瓶', category: '零件', stock: 2, minStock: 3, price: 1500, supplier: '湯淺', note: '' },
+          { id: 6, code: 'SPK-006', name: '火星塞', category: '耗材', stock: 15, minStock: 8, price: 80, supplier: '', note: '' },
+        ])
+
+        const stockLogs = ref([
+          { id: 1, itemName: '機油', type: 'out', quantity: 3, operator: '阿宏', date: '2025/10/28', time: '14:30', note: '客戶換油' },
+          { id: 2, itemName: '煞車皮', type: 'in', quantity: 10, operator: '阿強', date: '2025/10/28', time: '10:15', note: '補貨' },
+          { id: 3, itemName: '輪胎', type: 'out', quantity: 2, operator: '阿賢', date: '2025/10/27', time: '16:45', note: '更換前後輪' },
+        ])
+
+        const searchKeyword = ref('')
+        const filterCategory = ref('')
+        const filterStatus = ref('')
+        const showDialog = ref(false)
+        const showAdjustDialog = ref(false)
+        const isEdit = ref(false)
+        const adjustingItem = ref(null)
+        
+        const form = ref({ 
+          id: null, 
+          code: '', 
+          name: '', 
+          category: '', 
+          stock: 0, 
+          minStock: 0, 
+          price: 0,
+          supplier: '',
+          note: ''
+        })
+
+        const adjustForm = ref({
+          type: 'in',
+          quantity: 1,
+          operator: '',
+          note: ''
+        })
+
+        // 分類列表
+        const categories = computed(() => {
+          const cats = new Set(inventory.value.map(i => i.category))
+          return Array.from(cats)
+        })
+
+        // 篩選後的庫存
+        const filteredInventory = computed(() => {
+          let result = inventory.value
+
+          // 搜尋關鍵字
+          const kw = searchKeyword.value.trim()
+          if (kw) {
+            result = result.filter(item =>
+              item.name.includes(kw) || item.code.includes(kw)
+            )
+          }
+
+          // 分類篩選
+          if (filterCategory.value) {
+            result = result.filter(item => item.category === filterCategory.value)
+          }
+
+          // 狀態篩選
+          if (filterStatus.value === 'low') {
+            result = result.filter(item => item.stock <= item.minStock)
+          } else if (filterStatus.value === 'sufficient') {
+            result = result.filter(item => item.stock > item.minStock)
+          }
+
+          return result
+        })
+
+        // 庫存充足數量
+        const sufficientStock = computed(() => {
+          return inventory.value.filter(i => i.stock > i.minStock).length
+        })
+
+        // 庫存不足數量
+        const lowStock = computed(() => {
+          return inventory.value.filter(i => i.stock <= i.minStock).length
+        })
+
+        // 庫存不足項目
+        const lowStockItems = computed(() => {
+          return inventory.value.filter(i => i.stock <= i.minStock)
+        })
+
+        // 總價值
+        const totalValue = computed(() => {
+          return inventory.value.reduce((sum, i) => sum + (i.stock * i.price), 0)
+        })
+
+        // 對話框標題
+        const dialogTitle = computed(() => {
+          return isEdit.value ? '編輯零件資料' : '新增零件'
+        })
+
+        // 取得分類類型
+        const getCategoryType = (category) => {
+          const types = {
+            '耗材': 'warning',
+            '零件': 'primary',
+            '工具': 'info'
+          }
+          return types[category] || ''
+        }
+
+        // 取得庫存百分比
+        const getStockPercentage = (item) => {
+          const target = item.minStock * 2
+          return Math.min((item.stock / target) * 100, 100)
+        }
+
+        // 取得進度條顏色
+        const getProgressColor = (item) => {
+          if (item.stock <= item.minStock) return '#f56c6c'
+          if (item.stock <= item.minStock * 1.5) return '#e6a23c'
+          return '#67c23a'
+        }
+
+        // 打開新增對話框
+        const openAddDialog = () => {
+          isEdit.value = false
+          form.value = { 
+            id: null, 
+            code: '', 
+            name: '', 
+            category: '', 
+            stock: 0, 
+            minStock: 0, 
+            price: 0,
+            supplier: '',
+            note: ''
+          }
+          showDialog.value = true
+        }
+
+        // 編輯項目
+        const editItem = (row) => {
+          isEdit.value = true
+          form.value = { ...row }
+          showDialog.value = true
+        }
+
+        // 儲存項目
+        const saveItem = () => {
+          if (!form.value.code || !form.value.name || !form.value.category) {
+            ElementPlus.ElMessage.warning('請填寫必填欄位')
+            return
+          }
+
+          if (isEdit.value) {
+            const index = inventory.value.findIndex(i => i.id === form.value.id)
+            if (index !== -1) {
+              inventory.value[index] = { ...form.value }
+              ElementPlus.ElMessage.success('更新成功')
+            }
+          } else {
+            const newId = inventory.value.length > 0
+              ? Math.max(...inventory.value.map(i => i.id)) + 1
+              : 1
+            form.value.id = newId
+            inventory.value.push({ ...form.value })
+            ElementPlus.ElMessage.success('新增成功')
+          }
+          showDialog.value = false
+        }
+
+        // 刪除項目
+        const deleteItem = (row) => {
+          ElementPlus.ElMessageBox.confirm(
+            `確定要刪除「${row.name}」的資料嗎？`,
+            '確認刪除',
+            { 
+              confirmButtonText: '確定',
+              cancelButtonText: '取消',
+              type: 'warning' 
+            }
+          ).then(() => {
+            inventory.value = inventory.value.filter(i => i.id !== row.id)
+            ElementPlus.ElMessage.success('已刪除')
+          }).catch(() => {})
+        }
+
+        // 調整庫存
+        const adjustStock = (row) => {
+          adjustingItem.value = row
+          adjustForm.value = {
+            type: 'in',
+            quantity: 1,
+            operator: '',
+            note: ''
+          }
+          showAdjustDialog.value = true
+        }
+
+        // 取得調整後庫存
+        const getNewStock = () => {
+          if (!adjustingItem.value) return 0
+          const current = adjustingItem.value.stock
+          const quantity = adjustForm.value.quantity || 0
+          return adjustForm.value.type === 'in' 
+            ? current + quantity 
+            : current - quantity
+        }
+
+        // 儲存調整
+        const saveAdjustment = () => {
+          if (!adjustForm.value.operator) {
+            ElementPlus.ElMessage.warning('請輸入操作人')
+            return
+          }
+
+          if (adjustForm.value.type === 'out' && adjustForm.value.quantity > adjustingItem.value.stock) {
+            ElementPlus.ElMessage.warning('出庫數量不能大於當前庫存')
+            return
+          }
+
+          const index = inventory.value.findIndex(i => i.id === adjustingItem.value.id)
+          if (index !== -1) {
+            inventory.value[index].stock = getNewStock()
+            
+            // 新增異動記錄
+            const now = new Date()
+            const newLog = {
+              id: stockLogs.value.length + 1,
+              itemName: adjustingItem.value.name,
+              type: adjustForm.value.type,
+              quantity: adjustForm.value.quantity,
+              operator: adjustForm.value.operator,
+              date: `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`,
+              time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+              note: adjustForm.value.note
+            }
+            stockLogs.value.unshift(newLog)
+            
+            ElementPlus.ElMessage.success('庫存調整成功')
+            showAdjustDialog.value = false
+          }
+        }
+
+        // 匯出庫存
+        const exportInventory = () => {
+          ElementPlus.ElMessage.info('匯出功能開發中')
+        }
+
+        return {
+          inventory,
+          stockLogs,
+          searchKeyword,
+          filterCategory,
+          filterStatus,
+          filteredInventory,
+          categories,
+          sufficientStock,
+          lowStock,
+          lowStockItems,
+          totalValue,
+          showDialog,
+          showAdjustDialog,
+          form,
+          adjustForm,
+          adjustingItem,
+          isEdit,
+          dialogTitle,
+          getCategoryType,
+          getStockPercentage,
+          getProgressColor,
+          openAddDialog,
+          editItem,
+          saveItem,
+          deleteItem,
+          adjustStock,
+          getNewStock,
+          saveAdjustment,
+          exportInventory
+        }
+      }
+    }).use(ElementPlus).mount('#app')
+  </script>
+</body>
+</html>

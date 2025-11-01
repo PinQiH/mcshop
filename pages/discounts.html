@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>優惠管理</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="page-container">
+      <!-- 頁面標題 -->
+      <div class="page-header">
+        <h2>🎟️ 優惠管理</h2>
+        <p class="page-description">設定優惠方案、管理促銷活動、追蹤使用情況</p>
+      </div>
+
+      <!-- 統計卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card primary">
+          <div class="stat-icon">
+            <i class="fa-solid fa-ticket"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">優惠方案數</div>
+            <div class="stat-value">{{ discounts.length }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card success">
+          <div class="stat-icon">
+            <i class="fa-solid fa-check-circle"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">進行中</div>
+            <div class="stat-value">{{ activeDiscounts }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card warning">
+          <div class="stat-icon">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">總使用次數</div>
+            <div class="stat-value">{{ totalUsage }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card info">
+          <div class="stat-icon">
+            <i class="fa-solid fa-clock"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">即將到期</div>
+            <div class="stat-value">{{ expiringSoon }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增優惠表單 -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <i class="fa-solid fa-plus-circle"></i> 新增優惠方案
+        </div>
+        <div class="card-body">
+          <el-form :inline="true">
+            <el-form-item label="優惠名稱">
+              <el-input 
+                v-model="newDiscount.name" 
+                placeholder="例如：滿1000折100"
+                style="width: 200px;">
+              </el-input>
+            </el-form-item>
+            <el-form-item label="優惠類型">
+              <el-select 
+                v-model="newDiscount.type" 
+                placeholder="選擇類型"
+                style="width: 150px;">
+                <el-option label="折扣" value="discount"></el-option>
+                <el-option label="滿額折" value="amount_off"></el-option>
+                <el-option label="折扣碼" value="code"></el-option>
+                <el-option label="會員專屬" value="member"></el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="折扣內容">
+              <el-input 
+                v-model="newDiscount.content" 
+                placeholder="例如：9折 或 折100元"
+                style="width: 150px;">
+              </el-input>
+            </el-form-item>
+            <el-form-item label="活動期間">
+              <el-date-picker
+                v-model="newDiscount.dateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="開始日期"
+                end-placeholder="結束日期"
+                value-format="YYYY/MM/DD"
+                style="width: 280px;">
+              </el-date-picker>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="addDiscount">
+                <i class="fa-solid fa-plus"></i> 新增優惠
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
+
+      <!-- 快速篩選 -->
+      <div class="card mb-20">
+        <div class="card-body">
+          <div class="search-bar">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜尋優惠名稱..."
+              clearable
+              style="width: 250px;">
+              <template #prefix>
+                <i class="fa-solid fa-search"></i>
+              </template>
+            </el-input>
+            
+            <el-select 
+              v-model="filterType" 
+              placeholder="全部類型" 
+              clearable
+              style="width: 150px;">
+              <el-option label="全部類型" value=""></el-option>
+              <el-option label="折扣" value="discount"></el-option>
+              <el-option label="滿額折" value="amount_off"></el-option>
+              <el-option label="折扣碼" value="code"></el-option>
+              <el-option label="會員專屬" value="member"></el-option>
+            </el-select>
+
+            <el-select 
+              v-model="filterStatus" 
+              placeholder="全部狀態" 
+              clearable
+              style="width: 150px;">
+              <el-option label="全部狀態" value=""></el-option>
+              <el-option label="進行中" value="active"></el-option>
+              <el-option label="即將開始" value="upcoming"></el-option>
+              <el-option label="已結束" value="expired"></el-option>
+            </el-select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 優惠列表 -->
+      <div class="discount-grid">
+        <div 
+          class="discount-card" 
+          v-for="(discount, index) in filteredDiscounts" 
+          :key="discount.id">
+          <!-- 卡片頭部 -->
+          <div class="discount-header" :class="getStatusClass(discount)">
+            <div class="discount-badge">
+              <i :class="getTypeIcon(discount.type)"></i>
+            </div>
+            <div class="discount-status">
+              <el-tag :type="getStatusTagType(discount)" size="small">
+                {{ getStatusText(discount) }}
+              </el-tag>
+            </div>
+          </div>
+
+          <!-- 卡片內容 -->
+          <div class="discount-body">
+            <div class="discount-title">{{ discount.name }}</div>
+            <div class="discount-content">
+              <i class="fa-solid fa-tag"></i>
+              {{ discount.content }}
+            </div>
+            <div class="discount-type">
+              <el-tag :type="getTypeTagType(discount.type)" size="small">
+                {{ getTypeText(discount.type) }}
+              </el-tag>
+            </div>
+
+            <div class="discount-info">
+              <div class="info-item">
+                <i class="fa-solid fa-calendar"></i>
+                <span>{{ discount.startDate }} ~ {{ discount.endDate }}</span>
+              </div>
+              <div class="info-item">
+                <i class="fa-solid fa-users"></i>
+                <span>已使用 <strong>{{ discount.usage }}</strong> 次</span>
+              </div>
+              <div class="info-item">
+                <i class="fa-solid fa-clock"></i>
+                <span>剩餘 <strong>{{ getDaysLeft(discount) }}</strong> 天</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 卡片操作 -->
+          <div class="discount-footer">
+            <el-button size="small" @click="editDiscount(discount)">
+              <i class="fa-solid fa-edit"></i> 編輯
+            </el-button>
+            <el-button size="small" @click="duplicateDiscount(discount)">
+              <i class="fa-solid fa-copy"></i> 複製
+            </el-button>
+            <el-button size="small" type="danger" @click="removeDiscount(index)">
+              <i class="fa-solid fa-trash"></i> 刪除
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空狀態 -->
+      <div v-if="filteredDiscounts.length === 0" class="empty-state">
+        <i class="fa-solid fa-ticket"></i>
+        <h3>尚無優惠方案</h3>
+        <p>請使用上方表單新增第一個優惠方案</p>
+      </div>
+    </div>
+
+    <!-- 編輯優惠對話框 -->
+    <el-dialog 
+      v-model="showEditDialog" 
+      title="編輯優惠方案"
+      width="500px">
+      <el-form :model="editForm" label-width="90px">
+        <el-form-item label="優惠名稱" required>
+          <el-input 
+            v-model="editForm.name"
+            placeholder="請輸入優惠名稱">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="優惠類型" required>
+          <el-select 
+            v-model="editForm.type" 
+            style="width: 100%;">
+            <el-option label="折扣" value="discount"></el-option>
+            <el-option label="滿額折" value="amount_off"></el-option>
+            <el-option label="折扣碼" value="code"></el-option>
+            <el-option label="會員專屬" value="member"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="折扣內容" required>
+          <el-input 
+            v-model="editForm.content"
+            placeholder="例如：9折 或 折100元">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="活動期間" required>
+          <el-date-picker
+            v-model="editForm.dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="開始日期"
+            end-placeholder="結束日期"
+            value-format="YYYY/MM/DD"
+            style="width: 100%;">
+          </el-date-picker>
+        </el-form-item>
+        <el-form-item label="使用次數">
+          <el-input-number 
+            v-model="editForm.usage" 
+            :min="0"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="備註">
+          <el-input 
+            v-model="editForm.note"
+            type="textarea"
+            :rows="2"
+            placeholder="其他說明（選填）">
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveEdit">
+          <i class="fa-solid fa-check"></i> 確認儲存
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script>
+    const { createApp, ref, computed } = Vue
+
+    createApp({
+      setup() {
+        const discounts = ref([
+          { 
+            id: 1, 
+            name: '滿1000折100', 
+            type: 'amount_off',
+            content: '滿1000折100元',
+            startDate: '2025/10/01',
+            endDate: '2025/10/31',
+            usage: 12,
+            note: ''
+          },
+          { 
+            id: 2, 
+            name: '保養9折優惠', 
+            type: 'discount',
+            content: '所有保養項目9折',
+            startDate: '2025/11/01',
+            endDate: '2025/11/30',
+            usage: 5,
+            note: ''
+          },
+          { 
+            id: 3, 
+            name: '會員專屬85折', 
+            type: 'member',
+            content: '會員專屬85折',
+            startDate: '2025/10/15',
+            endDate: '2025/12/31',
+            usage: 28,
+            note: '僅限VIP會員'
+          },
+          { 
+            id: 4, 
+            name: '新客首次消費折200', 
+            type: 'code',
+            content: '折扣碼：NEW200',
+            startDate: '2025/09/01',
+            endDate: '2025/10/20',
+            usage: 45,
+            note: '已結束'
+          },
+        ])
+
+        const searchKeyword = ref('')
+        const filterType = ref('')
+        const filterStatus = ref('')
+        const showEditDialog = ref(false)
+        
+        const newDiscount = ref({
+          name: '',
+          type: 'discount',
+          content: '',
+          dateRange: [],
+          usage: 0
+        })
+
+        const editForm = ref({
+          id: null,
+          name: '',
+          type: 'discount',
+          content: '',
+          dateRange: [],
+          usage: 0,
+          note: ''
+        })
+
+        // 進行中的優惠
+        const activeDiscounts = computed(() => {
+          const today = new Date()
+          return discounts.value.filter(d => {
+            const start = new Date(d.startDate)
+            const end = new Date(d.endDate)
+            return today >= start && today <= end
+          }).length
+        })
+
+        // 總使用次數
+        const totalUsage = computed(() => {
+          return discounts.value.reduce((sum, d) => sum + d.usage, 0)
+        })
+
+        // 即將到期
+        const expiringSoon = computed(() => {
+          const today = new Date()
+          const sevenDaysLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+          return discounts.value.filter(d => {
+            const end = new Date(d.endDate)
+            return end > today && end <= sevenDaysLater
+          }).length
+        })
+
+        // 篩選後的優惠
+        const filteredDiscounts = computed(() => {
+          let result = discounts.value
+
+          // 關鍵字搜尋
+          if (searchKeyword.value) {
+            result = result.filter(d => 
+              d.name.includes(searchKeyword.value) || 
+              d.content.includes(searchKeyword.value)
+            )
+          }
+
+          // 類型篩選
+          if (filterType.value) {
+            result = result.filter(d => d.type === filterType.value)
+          }
+
+          // 狀態篩選
+          if (filterStatus.value) {
+            const today = new Date()
+            result = result.filter(d => {
+              const start = new Date(d.startDate)
+              const end = new Date(d.endDate)
+              
+              if (filterStatus.value === 'active') {
+                return today >= start && today <= end
+              } else if (filterStatus.value === 'upcoming') {
+                return today < start
+              } else if (filterStatus.value === 'expired') {
+                return today > end
+              }
+              return true
+            })
+          }
+
+          return result
+        })
+
+        // 取得狀態類別
+        const getStatusClass = (discount) => {
+          const today = new Date()
+          const start = new Date(discount.startDate)
+          const end = new Date(discount.endDate)
+          
+          if (today < start) return 'upcoming'
+          if (today > end) return 'expired'
+          return 'active'
+        }
+
+        // 取得狀態標籤類型
+        const getStatusTagType = (discount) => {
+          const status = getStatusClass(discount)
+          const types = {
+            'active': 'success',
+            'upcoming': 'warning',
+            'expired': 'info'
+          }
+          return types[status]
+        }
+
+        // 取得狀態文字
+        const getStatusText = (discount) => {
+          const status = getStatusClass(discount)
+          const texts = {
+            'active': '進行中',
+            'upcoming': '即將開始',
+            'expired': '已結束'
+          }
+          return texts[status]
+        }
+
+        // 取得類型圖示
+        const getTypeIcon = (type) => {
+          const icons = {
+            'discount': 'fa-solid fa-percent',
+            'amount_off': 'fa-solid fa-dollar-sign',
+            'code': 'fa-solid fa-code',
+            'member': 'fa-solid fa-crown'
+          }
+          return icons[type] || 'fa-solid fa-tag'
+        }
+
+        // 取得類型標籤類型
+        const getTypeTagType = (type) => {
+          const types = {
+            'discount': 'primary',
+            'amount_off': 'success',
+            'code': 'warning',
+            'member': 'danger'
+          }
+          return types[type] || ''
+        }
+
+        // 取得類型文字
+        const getTypeText = (type) => {
+          const texts = {
+            'discount': '折扣',
+            'amount_off': '滿額折',
+            'code': '折扣碼',
+            'member': '會員專屬'
+          }
+          return texts[type] || '一般'
+        }
+
+        // 取得剩餘天數
+        const getDaysLeft = (discount) => {
+          const today = new Date()
+          const end = new Date(discount.endDate)
+          const diff = Math.ceil((end - today) / (1000 * 60 * 60 * 24))
+          return diff > 0 ? diff : 0
+        }
+
+        // 新增優惠
+        const addDiscount = () => {
+          if (!newDiscount.value.name || !newDiscount.value.content || !newDiscount.value.dateRange || newDiscount.value.dateRange.length !== 2) {
+            ElementPlus.ElMessage.warning('請填寫完整資料')
+            return
+          }
+
+          const newId = discounts.value.length > 0
+            ? Math.max(...discounts.value.map(d => d.id)) + 1
+            : 1
+
+          discounts.value.push({
+            id: newId,
+            name: newDiscount.value.name,
+            type: newDiscount.value.type,
+            content: newDiscount.value.content,
+            startDate: newDiscount.value.dateRange[0],
+            endDate: newDiscount.value.dateRange[1],
+            usage: 0,
+            note: ''
+          })
+
+          newDiscount.value = {
+            name: '',
+            type: 'discount',
+            content: '',
+            dateRange: [],
+            usage: 0
+          }
+
+          ElementPlus.ElMessage.success('新增成功')
+        }
+
+        // 編輯優惠
+        const editDiscount = (discount) => {
+          editForm.value = {
+            ...discount,
+            dateRange: [discount.startDate, discount.endDate]
+          }
+          showEditDialog.value = true
+        }
+
+        // 儲存編輯
+        const saveEdit = () => {
+          if (!editForm.value.name || !editForm.value.content || !editForm.value.dateRange || editForm.value.dateRange.length !== 2) {
+            ElementPlus.ElMessage.warning('請填寫完整資料')
+            return
+          }
+
+          const index = discounts.value.findIndex(d => d.id === editForm.value.id)
+          if (index !== -1) {
+            discounts.value[index] = {
+              ...editForm.value,
+              startDate: editForm.value.dateRange[0],
+              endDate: editForm.value.dateRange[1]
+            }
+            ElementPlus.ElMessage.success('更新成功')
+            showEditDialog.value = false
+          }
+        }
+
+        // 複製優惠
+        const duplicateDiscount = (discount) => {
+          const newId = Math.max(...discounts.value.map(d => d.id)) + 1
+          discounts.value.push({
+            ...discount,
+            id: newId,
+            name: discount.name + ' (複製)',
+            usage: 0
+          })
+          ElementPlus.ElMessage.success('複製成功')
+        }
+
+        // 刪除優惠
+        const removeDiscount = (index) => {
+          ElementPlus.ElMessageBox.confirm(
+            `確定要刪除「${discounts.value[index].name}」嗎？`,
+            '確認刪除',
+            {
+              confirmButtonText: '確定',
+              cancelButtonText: '取消',
+              type: 'warning',
+            }
+          ).then(() => {
+            discounts.value.splice(index, 1)
+            ElementPlus.ElMessage.success('已刪除')
+          }).catch(() => {})
+        }
+
+        return {
+          discounts,
+          filteredDiscounts,
+          searchKeyword,
+          filterType,
+          filterStatus,
+          activeDiscounts,
+          totalUsage,
+          expiringSoon,
+          newDiscount,
+          editForm,
+          showEditDialog,
+          getStatusClass,
+          getStatusTagType,
+          getStatusText,
+          getTypeIcon,
+          getTypeTagType,
+          getTypeText,
+          getDaysLeft,
+          addDiscount,
+          editDiscount,
+          saveEdit,
+          duplicateDiscount,
+          removeDiscount
+        }
+      }
+    }).use(ElementPlus).mount('#app')
+  </script>
+
+  <style>
+/* 優惠卡片網格 */
+.discount-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+/* 優惠卡片 */
+.discount-card {
+  background: white;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.discount-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+}
+
+/* 卡片頭部 */
+.discount-header {
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.discount-header.active {
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+}
+
+.discount-header.upcoming {
+  background: linear-gradient(135deg, #e6a23c 0%, #f0c78a 100%);
+}
+
+.discount-header.expired {
+  background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
+}
+
+.discount-badge {
+  width: 60px;
+  height: 60px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 28px;
+}
+
+.discount-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+/* 卡片內容 */
+.discount-body {
+  padding: 20px;
+}
+
+.discount-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.discount-content {
+  font-size: 24px;
+  font-weight: bold;
+  color: #409EFF;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.discount-type {
+  margin-bottom: 16px;
+}
+
+.discount-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e4e7ed;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.info-item i {
+  color: #909399;
+  width: 16px;
+}
+
+.info-item strong {
+  color: #409EFF;
+}
+
+/* 卡片底部 */
+.discount-footer {
+  padding: 12px 20px;
+  background: #f5f7fa;
+  border-top: 1px solid #e4e7ed;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.discount-footer .el-button {
+  flex: 1;
+}
+
+/* 響應式 */
+@media (max-width: 768px) {
+  .discount-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .discount-footer {
+    flex-direction: column;
+  }
+
+  .discount-footer .el-button {
+    width: 100%;
+  }
+}
+  </style>
+</body>
+</html>

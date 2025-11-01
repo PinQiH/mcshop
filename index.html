@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>機車行維修管理系統 (PoC)</title>
+  <script src="https://unpkg.com/vue@3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <script src="https://unpkg.com/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: "Noto Sans TC", sans-serif; background: #f5f7fa; margin: 0; }
+    .container { max-width: 1000px; margin: 30px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <el-menu mode="horizontal" :default-active="activePage" @select="activePage = $event" style="margin-bottom: 20px;">
+      <el-menu-item index="jobs">🧾 維修單</el-menu-item>
+      <el-menu-item index="customers">👤 客戶</el-menu-item>
+      <el-menu-item index="parts">🧰 零件庫存</el-menu-item>
+      <el-menu-item index="reports">💰 收支報表</el-menu-item>
+      <el-menu-item index="staff">👨‍🔧 技師管理</el-menu-item>
+    </el-menu>
+
+    <!-- 維修單管理 -->
+    <div v-if="activePage === 'jobs'">
+      <h2>維修單管理</h2>
+      <el-form :model="newJob" inline style="margin-top: 10px;">
+        <el-form-item label="客戶"><el-input v-model="newJob.customer" placeholder="姓名"></el-input></el-form-item>
+        <el-form-item label="車牌"><el-input v-model="newJob.plate" placeholder="ABC-1234"></el-input></el-form-item>
+        <el-form-item label="項目"><el-input v-model="newJob.item" placeholder="換機油"></el-input></el-form-item>
+        <el-form-item label="金額"><el-input v-model.number="newJob.price" type="number"></el-input></el-form-item>
+        <el-form-item><el-button type="primary" @click="addJob">新增</el-button></el-form-item>
+      </el-form>
+
+      <el-table :data="jobs" style="width:100%;margin-top:10px;" border>
+        <el-table-column prop="id" label="單號" width="60"></el-table-column>
+        <el-table-column prop="customer" label="客戶"></el-table-column>
+        <el-table-column prop="plate" label="車牌"></el-table-column>
+        <el-table-column prop="item" label="項目"></el-table-column>
+        <el-table-column prop="price" label="金額"></el-table-column>
+        <el-table-column label="狀態">
+          <template #default="scope">
+            <el-select v-model="scope.row.status" @change="saveJobs">
+              <el-option label="待維修" value="待維修"></el-option>
+              <el-option label="維修中" value="維修中"></el-option>
+              <el-option label="已完成" value="已完成"></el-option>
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="100">
+          <template #default="scope">
+            <el-button size="small" type="danger" @click="deleteJob(scope.row.id)">刪除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 客戶管理 -->
+    <div v-if="activePage === 'customers'">
+      <h2>客戶資料</h2>
+      <el-input v-model="searchCustomer" placeholder="搜尋姓名或車牌..." style="margin-bottom:10px;width:300px;"></el-input>
+      <el-table :data="filteredCustomers" border>
+        <el-table-column prop="name" label="姓名"></el-table-column>
+        <el-table-column prop="phone" label="電話"></el-table-column>
+        <el-table-column prop="plate" label="車牌"></el-table-column>
+        <el-table-column prop="lastService" label="上次維修"></el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 零件庫存 -->
+    <div v-if="activePage === 'parts'">
+      <h2>零件庫存</h2>
+      <el-table :data="parts" border>
+        <el-table-column prop="name" label="零件名稱"></el-table-column>
+        <el-table-column prop="stock" label="庫存">
+          <template #default="scope">
+            <el-input-number v-model="scope.row.stock" @change="saveParts" :min="0"></el-input-number>
+          </template>
+        </el-table-column>
+        <el-table-column prop="min" label="警示值"></el-table-column>
+        <el-table-column label="狀態">
+          <template #default="scope">
+            <el-tag :type="scope.row.stock <= scope.row.min ? 'danger' : 'success'">
+              {{ scope.row.stock <= scope.row.min ? '需補貨' : '正常' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 收支報表 -->
+    <div v-if="activePage === 'reports'">
+      <h2>收支報表</h2>
+      <el-row :gutter="20">
+        <el-col :span="8"><el-statistic title="本月營收" :value="32000" suffix="NTD"></el-statistic></el-col>
+        <el-col :span="8"><el-statistic title="本月成本" :value="12000" suffix="NTD"></el-statistic></el-col>
+        <el-col :span="8"><el-statistic title="本月淨利" :value="20000" suffix="NTD"></el-statistic></el-col>
+      </el-row>
+      <canvas id="chart" style="margin-top:20px;max-width:600px;"></canvas>
+    </div>
+
+    <!-- 技師管理 -->
+    <div v-if="activePage === 'staff'">
+      <h2>技師資料</h2>
+      <el-table :data="staff" border>
+        <el-table-column prop="name" label="姓名"></el-table-column>
+        <el-table-column prop="specialty" label="專長"></el-table-column>
+        <el-table-column prop="jobs" label="完成件數"></el-table-column>
+      </el-table>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, onMounted, computed } = Vue
+    const app = createApp({
+      setup() {
+        const activePage = ref('jobs')
+        const newJob = reactive({ customer: '', plate: '', item: '', price: 0 })
+        const jobs = ref(JSON.parse(localStorage.getItem('jobs') || '[]'))
+        const parts = ref([
+          { name: '機油', stock: 12, min: 5 },
+          { name: '煞車皮', stock: 3, min: 5 },
+          { name: '火星塞', stock: 8, min: 3 }
+        ])
+        const customers = ref([
+          { name: '王小明', phone: '0912-345-678', plate: 'ABC-1234', lastService: '2025/09/01' },
+          { name: '李大華', phone: '0922-111-222', plate: 'DEF-5678', lastService: '2025/09/20' }
+        ])
+        const staff = ref([
+          { name: '阿宏', specialty: '引擎維修', jobs: 15 },
+          { name: '阿強', specialty: '電系檢修', jobs: 10 },
+          { name: '阿賢', specialty: '輪胎更換', jobs: 8 }
+        ])
+        const searchCustomer = ref('')
+        const filteredCustomers = computed(() => {
+          return customers.value.filter(c =>
+            c.name.includes(searchCustomer.value) || c.plate.includes(searchCustomer.value)
+          )
+        })
+
+        const addJob = () => {
+          if (!newJob.customer || !newJob.plate || !newJob.item) {
+            ElementPlus.ElMessage.warning('請填寫完整資料')
+            return
+          }
+          const id = jobs.value.length ? jobs.value[jobs.value.length - 1].id + 1 : 1
+          jobs.value.push({ ...newJob, id, status: '待維修' })
+          localStorage.setItem('jobs', JSON.stringify(jobs.value))
+          newJob.customer = newJob.plate = newJob.item = ''
+          newJob.price = 0
+          ElementPlus.ElMessage.success('新增成功')
+        }
+        const deleteJob = (id) => {
+          jobs.value = jobs.value.filter(j => j.id !== id)
+          localStorage.setItem('jobs', JSON.stringify(jobs.value))
+          ElementPlus.ElMessage.success('已刪除')
+        }
+        const saveJobs = () => localStorage.setItem('jobs', JSON.stringify(jobs.value))
+        const saveParts = () => ElementPlus.ElMessage.success('庫存已更新')
+
+        onMounted(() => {
+          const ctx = document.getElementById('chart')
+          if (ctx) new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: ['7月', '8月', '9月', '10月'],
+              datasets: [{ label: '月營收', data: [18000, 24000, 30000, 32000] }]
+            }
+          })
+        })
+
+        return { activePage, newJob, jobs, addJob, deleteJob, saveJobs, parts, saveParts, customers, searchCustomer, filteredCustomers, staff }
+      }
+    })
+    app.use(ElementPlus)
+    app.mount('#app')
+  </script>
+</body>
+</html>

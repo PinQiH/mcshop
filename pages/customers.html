@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>客戶管理</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="page-container">
+      <!-- 頁面標題 -->
+      <div class="page-header">
+        <h2>👤 客戶管理</h2>
+        <p class="page-description">管理客戶資料、查看維修歷史、統計客戶數據</p>
+      </div>
+
+      <!-- 統計卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card primary">
+          <div class="stat-icon">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">總客戶數</div>
+            <div class="stat-value">{{ customers.length }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card success">
+          <div class="stat-icon">
+            <i class="fa-solid fa-motorcycle"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">登記車輛</div>
+            <div class="stat-value">{{ totalVehicles }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card warning">
+          <div class="stat-icon">
+            <i class="fa-solid fa-calendar-check"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">本月新增</div>
+            <div class="stat-value">{{ monthlyNewCustomers }}</div>
+          </div>
+        </div>
+        
+        <div class="stat-card info">
+          <div class="stat-icon">
+            <i class="fa-solid fa-star"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">VIP客戶</div>
+            <div class="stat-value">{{ vipCustomers }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 搜尋和篩選 -->
+      <div class="card mb-20">
+        <div class="card-body">
+          <div class="search-bar">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜尋客戶姓名、電話或車牌"
+              clearable
+              style="width: 300px;">
+              <template #prefix>
+                <i class="fa-solid fa-search"></i>
+              </template>
+            </el-input>
+            
+            <el-select 
+              v-model="filterBrand" 
+              placeholder="車輛品牌" 
+              clearable
+              style="width: 150px;">
+              <el-option label="全部品牌" value=""></el-option>
+              <el-option 
+                v-for="brand in brands" 
+                :key="brand" 
+                :label="brand" 
+                :value="brand">
+              </el-option>
+            </el-select>
+
+            <el-select 
+              v-model="filterLevel" 
+              placeholder="客戶等級" 
+              clearable
+              style="width: 150px;">
+              <el-option label="全部等級" value=""></el-option>
+              <el-option label="一般客戶" value="normal"></el-option>
+              <el-option label="VIP客戶" value="vip"></el-option>
+            </el-select>
+
+            <div style="flex: 1;"></div>
+
+            <el-button type="primary" @click="openAddDialog">
+              <i class="fa-solid fa-user-plus"></i> 新增客戶
+            </el-button>
+            <el-button @click="exportCustomers">
+              <i class="fa-solid fa-download"></i> 匯出Excel
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 客戶表格 -->
+      <div class="card">
+        <div class="card-body" style="padding: 0;">
+          <el-table 
+            :data="filteredCustomers" 
+            border 
+            stripe
+            @row-click="viewCustomerDetail">
+            <el-table-column type="expand">
+              <template #default="props">
+                <div style="padding: 20px;">
+                  <h4 style="margin-bottom: 12px;">
+                    <i class="fa-solid fa-circle-info"></i> 詳細資料
+                  </h4>
+                  <div class="detail-row">
+                    <div class="detail-label">地址</div>
+                    <div class="detail-value">{{ props.row.address || '未填寫' }}</div>
+                  </div>
+                  <div class="detail-row">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value">{{ props.row.email || '未填寫' }}</div>
+                  </div>
+                  <div class="detail-row">
+                    <div class="detail-label">註冊日期</div>
+                    <div class="detail-value">{{ props.row.registerDate }}</div>
+                  </div>
+                  <div class="detail-row">
+                    <div class="detail-label">維修次數</div>
+                    <div class="detail-value">
+                      <el-tag type="success">{{ props.row.repairCount }} 次</el-tag>
+                    </div>
+                  </div>
+                  <div class="detail-row">
+                    <div class="detail-label">累計消費</div>
+                    <div class="detail-value">
+                      <strong style="color: #67c23a; font-size: 16px;">
+                        ${{ props.row.totalSpent.toLocaleString() }}
+                      </strong>
+                    </div>
+                  </div>
+                  <div class="detail-row">
+                    <div class="detail-label">備註</div>
+                    <div class="detail-value">{{ props.row.note || '無' }}</div>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="name" label="姓名" width="120">
+              <template #default="scope">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-user" style="color: #409EFF;"></i>
+                  <strong>{{ scope.row.name }}</strong>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="phone" label="電話" width="140">
+              <template #default="scope">
+                <i class="fa-solid fa-phone" style="color: #67c23a; margin-right: 6px;"></i>
+                {{ scope.row.phone }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="plate" label="車牌" width="130">
+              <template #default="scope">
+                <el-tag>{{ scope.row.plate }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="model" label="車款" width="180">
+              <template #default="scope">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <i class="fa-solid fa-motorcycle" style="color: #909399;"></i>
+                  {{ scope.row.model }}
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="客戶等級" width="110" align="center">
+              <template #default="scope">
+                <el-tag :type="scope.row.level === 'vip' ? 'danger' : ''">
+                  <i :class="scope.row.level === 'vip' ? 'fa-solid fa-crown' : 'fa-solid fa-user'"></i>
+                  {{ scope.row.level === 'vip' ? 'VIP' : '一般' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="repairCount" label="維修次數" width="100" align="center" sortable>
+              <template #default="scope">
+                <el-tag type="success" size="small">{{ scope.row.repairCount }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="totalSpent" label="累計消費" width="130" align="right" sortable>
+              <template #default="scope">
+                <span style="color: #67c23a; font-weight: bold;">
+                  ${{ scope.row.totalSpent.toLocaleString() }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="220" align="center" fixed="right">
+              <template #default="scope">
+                <el-button 
+                  size="small" 
+                  @click.stop="viewHistory(scope.row)">
+                  <i class="fa-solid fa-clock-rotate-left"></i> 歷史
+                </el-button>
+                <el-button 
+                  size="small" 
+                  @click.stop="editCustomer(scope.row)">
+                  <i class="fa-solid fa-edit"></i>
+                </el-button>
+                <el-button 
+                  size="small" 
+                  type="danger" 
+                  @click.stop="deleteCustomer(scope.row)">
+                  <i class="fa-solid fa-trash"></i>
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增/編輯客戶對話框 -->
+    <el-dialog 
+      v-model="showDialog" 
+      :title="dialogTitle"
+      width="600px">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="姓名" required>
+          <el-input 
+            v-model="form.name"
+            placeholder="請輸入客戶姓名">
+            <template #prefix>
+              <i class="fa-solid fa-user"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="電話" required>
+          <el-input 
+            v-model="form.phone"
+            placeholder="0912-345-678">
+            <template #prefix>
+              <i class="fa-solid fa-phone"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="車牌號碼" required>
+          <el-input 
+            v-model="form.plate"
+            placeholder="ABC-1234">
+            <template #prefix>
+              <i class="fa-solid fa-id-card"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="車款" required>
+          <el-input 
+            v-model="form.model"
+            placeholder="例如：Yamaha SMAX">
+            <template #prefix>
+              <i class="fa-solid fa-motorcycle"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="Email">
+          <el-input 
+            v-model="form.email"
+            placeholder="example@email.com">
+            <template #prefix>
+              <i class="fa-solid fa-envelope"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="地址">
+          <el-input 
+            v-model="form.address"
+            placeholder="請輸入地址">
+            <template #prefix>
+              <i class="fa-solid fa-location-dot"></i>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="客戶等級">
+          <el-radio-group v-model="form.level">
+            <el-radio label="normal">
+              <i class="fa-solid fa-user"></i> 一般客戶
+            </el-radio>
+            <el-radio label="vip">
+              <i class="fa-solid fa-crown"></i> VIP客戶
+            </el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="備註">
+          <el-input 
+            v-model="form.note"
+            type="textarea"
+            :rows="3"
+            placeholder="其他需要記錄的資訊">
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveCustomer">
+          <i class="fa-solid fa-check"></i> 確認儲存
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 維修歷史對話框 -->
+    <el-dialog 
+      v-model="showHistoryDialog" 
+      :title="historyTitle"
+      width="800px">
+      <div class="timeline">
+        <div class="timeline-item" v-for="record in historyRecords" :key="record.id">
+          <div class="timeline-dot"></div>
+          <div class="timeline-content">
+            <div class="timeline-title">{{ record.item }}</div>
+            <div class="timeline-time">{{ record.date }}</div>
+            <div class="timeline-desc">
+              <div style="display: flex; gap: 20px; margin-top: 8px;">
+                <span>
+                  <i class="fa-solid fa-wrench"></i>
+                  維修項目：{{ record.item }}
+                </span>
+                <span>
+                  <i class="fa-solid fa-dollar-sign"></i>
+                  費用：${{ record.cost.toLocaleString() }}
+                </span>
+                <span>
+                  <el-tag :type="getStatusType(record.status)" size="small">
+                    {{ record.status }}
+                  </el-tag>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="historyRecords.length === 0" class="empty-state">
+        <i class="fa-solid fa-clipboard"></i>
+        <p>尚無維修記錄</p>
+      </div>
+    </el-dialog>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script>
+    const { createApp, ref, computed } = Vue
+
+    createApp({
+      setup() {
+        const customers = ref([
+          { 
+            id: 1, 
+            name: '王小明', 
+            phone: '0912-345-678', 
+            plate: 'ABC-1234', 
+            model: 'Yamaha SMAX',
+            email: 'wang@example.com',
+            address: '台北市信義區信義路100號',
+            level: 'vip',
+            registerDate: '2024/05/15',
+            repairCount: 8,
+            totalSpent: 12500,
+            note: '常客，喜歡原廠零件'
+          },
+          { 
+            id: 2, 
+            name: '李大華', 
+            phone: '0987-654-321', 
+            plate: 'DEF-5678', 
+            model: 'SYM Jet S',
+            email: 'lee@example.com',
+            address: '新北市板橋區文化路200號',
+            level: 'normal',
+            registerDate: '2024/08/20',
+            repairCount: 3,
+            totalSpent: 4200,
+            note: ''
+          },
+          { 
+            id: 3, 
+            name: '陳小美', 
+            phone: '0923-456-789', 
+            plate: 'XYZ-9999', 
+            model: 'Gogoro 2',
+            email: 'chen@example.com',
+            address: '桃園市中壢區中山路300號',
+            level: 'vip',
+            registerDate: '2023/12/10',
+            repairCount: 15,
+            totalSpent: 28900,
+            note: 'VIP客戶，定期保養'
+          },
+          { 
+            id: 4, 
+            name: '張三', 
+            phone: '0934-567-890', 
+            plate: 'GHI-1111', 
+            model: 'Kymco Racing 150',
+            email: '',
+            address: '',
+            level: 'normal',
+            registerDate: '2025/09/05',
+            repairCount: 1,
+            totalSpent: 800,
+            note: ''
+          },
+        ])
+
+        const searchKeyword = ref('')
+        const filterBrand = ref('')
+        const filterLevel = ref('')
+        const showDialog = ref(false)
+        const showHistoryDialog = ref(false)
+        const isEdit = ref(false)
+        const currentCustomer = ref(null)
+        
+        const form = ref({ 
+          id: null, 
+          name: '', 
+          phone: '', 
+          plate: '', 
+          model: '',
+          email: '',
+          address: '',
+          level: 'normal',
+          registerDate: '',
+          repairCount: 0,
+          totalSpent: 0,
+          note: ''
+        })
+
+        const historyRecords = ref([
+          { id: 1, date: '2025/10/15', item: '換機油', cost: 500, status: '已完成' },
+          { id: 2, date: '2025/09/20', item: '更換煞車皮', cost: 800, status: '已完成' },
+          { id: 3, date: '2025/08/10', item: '定期保養', cost: 1200, status: '已完成' },
+        ])
+
+        // 品牌列表
+        const brands = computed(() => {
+          const brandSet = new Set()
+          customers.value.forEach(c => {
+            const brand = c.model.split(' ')[0]
+            brandSet.add(brand)
+          })
+          return Array.from(brandSet)
+        })
+
+        // 總車輛數
+        const totalVehicles = computed(() => {
+          return customers.value.length
+        })
+
+        // 本月新增客戶
+        const monthlyNewCustomers = computed(() => {
+          const today = new Date()
+          const currentMonth = today.getMonth() + 1
+          const currentYear = today.getFullYear()
+          
+          return customers.value.filter(c => {
+            const [year, month] = c.registerDate.split('/')
+            return parseInt(year) === currentYear && parseInt(month) === currentMonth
+          }).length
+        })
+
+        // VIP客戶數
+        const vipCustomers = computed(() => {
+          return customers.value.filter(c => c.level === 'vip').length
+        })
+
+        // 篩選後的客戶
+        const filteredCustomers = computed(() => {
+          let result = customers.value
+
+          // 關鍵字搜尋
+          const kw = searchKeyword.value.trim()
+          if (kw) {
+            result = result.filter(c =>
+              c.name.includes(kw) || 
+              c.plate.includes(kw) ||
+              c.phone.includes(kw)
+            )
+          }
+
+          // 品牌篩選
+          if (filterBrand.value) {
+            result = result.filter(c => c.model.startsWith(filterBrand.value))
+          }
+
+          // 等級篩選
+          if (filterLevel.value) {
+            result = result.filter(c => c.level === filterLevel.value)
+          }
+
+          return result
+        })
+
+        // 對話框標題
+        const dialogTitle = computed(() => {
+          return isEdit.value ? '編輯客戶資料' : '新增客戶'
+        })
+
+        // 歷史記錄標題
+        const historyTitle = computed(() => {
+          return currentCustomer.value 
+            ? `${currentCustomer.value.name} 的維修歷史` 
+            : '維修歷史'
+        })
+
+        // 取得狀態類型
+        const getStatusType = (status) => {
+          const types = {
+            '已完成': 'success',
+            '進行中': 'warning',
+            '待處理': 'info'
+          }
+          return types[status] || ''
+        }
+
+        // 打開新增對話框
+        const openAddDialog = () => {
+          isEdit.value = false
+          const today = new Date()
+          form.value = { 
+            id: null, 
+            name: '', 
+            phone: '', 
+            plate: '', 
+            model: '',
+            email: '',
+            address: '',
+            level: 'normal',
+            registerDate: `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`,
+            repairCount: 0,
+            totalSpent: 0,
+            note: ''
+          }
+          showDialog.value = true
+        }
+
+        // 編輯客戶
+        const editCustomer = (row) => {
+          isEdit.value = true
+          form.value = { ...row }
+          showDialog.value = true
+        }
+
+        // 儲存客戶
+        const saveCustomer = () => {
+          if (!form.value.name || !form.value.phone || !form.value.plate || !form.value.model) {
+            ElementPlus.ElMessage.warning('請填寫必填欄位')
+            return
+          }
+
+          if (isEdit.value) {
+            const index = customers.value.findIndex(c => c.id === form.value.id)
+            if (index !== -1) {
+              customers.value[index] = { ...form.value }
+              ElementPlus.ElMessage.success('更新成功')
+            }
+          } else {
+            const newId = customers.value.length > 0
+              ? Math.max(...customers.value.map(c => c.id)) + 1
+              : 1
+            form.value.id = newId
+            customers.value.push({ ...form.value })
+            ElementPlus.ElMessage.success('新增成功')
+          }
+          showDialog.value = false
+        }
+
+        // 刪除客戶
+        const deleteCustomer = (row) => {
+          ElementPlus.ElMessageBox.confirm(
+            `確定要刪除「${row.name}」的資料嗎？相關的維修記錄也會被刪除。`,
+            '確認刪除',
+            { 
+              confirmButtonText: '確定',
+              cancelButtonText: '取消',
+              type: 'warning' 
+            }
+          ).then(() => {
+            customers.value = customers.value.filter(c => c.id !== row.id)
+            ElementPlus.ElMessage.success('已刪除')
+          }).catch(() => {})
+        }
+
+        // 查看維修歷史
+        const viewHistory = (row) => {
+          currentCustomer.value = row
+          // 這裡可以根據客戶ID載入真實的歷史記錄
+          showHistoryDialog.value = true
+        }
+
+        // 查看客戶詳情（點擊行）
+        const viewCustomerDetail = (row) => {
+          // 展開行的功能由 Element Plus 自動處理
+          console.log('查看客戶詳情:', row.name)
+        }
+
+        // 匯出客戶
+        const exportCustomers = () => {
+          ElementPlus.ElMessage.info('匯出功能開發中')
+        }
+
+        return {
+          customers,
+          filteredCustomers,
+          searchKeyword,
+          filterBrand,
+          filterLevel,
+          brands,
+          totalVehicles,
+          monthlyNewCustomers,
+          vipCustomers,
+          showDialog,
+          showHistoryDialog,
+          form,
+          isEdit,
+          currentCustomer,
+          historyRecords,
+          dialogTitle,
+          historyTitle,
+          getStatusType,
+          openAddDialog,
+          editCustomer,
+          saveCustomer,
+          deleteCustomer,
+          viewHistory,
+          viewCustomerDetail,
+          exportCustomers
+        }
+      }
+    }).use(ElementPlus).mount('#app')
+  </script>
+</body>
+</html>

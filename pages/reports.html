@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>收支報表</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="page-container">
+      <!-- 頁面標題 -->
+      <div class="page-header">
+        <h2>💰 收支報表</h2>
+        <p class="page-description">查看營收統計、分析收支狀況、產生財務報表</p>
+      </div>
+
+      <!-- 時間篩選 -->
+      <div class="card mb-20">
+        <div class="card-body">
+          <el-form :inline="true">
+            <el-form-item label="查詢時間">
+              <el-date-picker
+                v-model="dateRange"
+                type="monthrange"
+                range-separator="至"
+                start-placeholder="開始月份"
+                end-placeholder="結束月份"
+                value-format="YYYY-MM"
+                @change="handleDateChange">
+              </el-date-picker>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="exportReport">
+                <i class="fa-solid fa-download"></i> 匯出報表
+              </el-button>
+              <el-button @click="addRecord">
+                <i class="fa-solid fa-plus"></i> 新增記錄
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
+
+      <!-- 統計卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card success">
+          <div class="stat-icon">
+            <i class="fa-solid fa-arrow-trend-up"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">本月營收</div>
+            <div class="stat-value">{{ reportSummary.revenue.toLocaleString() }}</div>
+            <div class="stat-trend up">
+              <i class="fa-solid fa-arrow-up"></i> 較上月 +12%
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card danger">
+          <div class="stat-icon">
+            <i class="fa-solid fa-coins"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">本月成本</div>
+            <div class="stat-value">{{ reportSummary.cost.toLocaleString() }}</div>
+            <div class="stat-trend down">
+              <i class="fa-solid fa-arrow-down"></i> 較上月 -5%
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card primary">
+          <div class="stat-icon">
+            <i class="fa-solid fa-chart-line"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">本月淨利</div>
+            <div class="stat-value">{{ reportSummary.profit.toLocaleString() }}</div>
+            <div class="stat-trend up">
+              <i class="fa-solid fa-arrow-up"></i> 較上月 +25%
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card warning">
+          <div class="stat-icon">
+            <i class="fa-solid fa-percent"></i>
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">利潤率</div>
+            <div class="stat-value">{{ profitMargin }}%</div>
+            <div class="stat-trend" :class="profitMargin >= 30 ? 'up' : 'down'">
+              {{ profitMargin >= 30 ? '健康' : '需改善' }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 圖表區域 -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <i class="fa-solid fa-chart-area"></i> 營收趨勢圖
+        </div>
+        <div class="card-body">
+          <div class="chart-controls mb-15">
+            <el-radio-group v-model="chartType" size="small" @change="updateChart">
+              <el-radio-button label="revenue">營收</el-radio-button>
+              <el-radio-button label="cost">成本</el-radio-button>
+              <el-radio-button label="profit">淨利</el-radio-button>
+              <el-radio-button label="all">全部</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="dailyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 圓餅圖 - 成本分析 -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        <div class="card">
+          <div class="card-header">
+            <i class="fa-solid fa-chart-pie"></i> 成本結構分析
+          </div>
+          <div class="card-body">
+            <div class="chart-wrapper" style="max-height: 300px;">
+              <canvas id="costPieChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <i class="fa-solid fa-ranking-star"></i> 收入來源分析
+          </div>
+          <div class="card-body">
+            <div class="revenue-source-list">
+              <div class="revenue-source-item">
+                <div class="source-info">
+                  <span class="source-label">維修服務</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width: 65%; background: #409EFF;"></div>
+                  </div>
+                </div>
+                <span class="source-value">65%</span>
+              </div>
+              <div class="revenue-source-item">
+                <div class="source-info">
+                  <span class="source-label">零件銷售</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width: 25%; background: #67c23a;"></div>
+                  </div>
+                </div>
+                <span class="source-value">25%</span>
+              </div>
+              <div class="revenue-source-item">
+                <div class="source-info">
+                  <span class="source-label">定期保養</span>
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width: 10%; background: #e6a23c;"></div>
+                  </div>
+                </div>
+                <span class="source-value">10%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 詳細記錄表格 -->
+      <div class="card">
+        <div class="card-header flex-between">
+          <span><i class="fa-solid fa-table"></i> 詳細記錄</span>
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜尋日期..."
+            style="width: 200px;"
+            clearable>
+            <template #prefix>
+              <i class="fa-solid fa-search"></i>
+            </template>
+          </el-input>
+        </div>
+        <div class="card-body" style="padding: 0;">
+          <el-table 
+            :data="filteredReportDetails" 
+            border 
+            stripe
+            :default-sort="{ prop: 'date', order: 'descending' }">
+            <el-table-column prop="date" label="日期" width="140" sortable>
+              <template #default="scope">
+                <i class="fa-solid fa-calendar-day"></i>
+                {{ scope.row.date }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="revenue" label="收入" width="140" align="right" sortable>
+              <template #default="scope">
+                <span style="color: #67c23a; font-weight: bold;">
+                  +${{ scope.row.revenue.toLocaleString() }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="cost" label="成本" width="140" align="right" sortable>
+              <template #default="scope">
+                <span style="color: #f56c6c; font-weight: bold;">
+                  -${{ scope.row.cost.toLocaleString() }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="profit" label="淨利" width="140" align="right" sortable>
+              <template #default="scope">
+                <span :style="{ color: scope.row.profit >= 0 ? '#409EFF' : '#f56c6c', fontWeight: 'bold' }">
+                  ${{ scope.row.profit.toLocaleString() }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="margin" label="利潤率" width="120" align="center">
+              <template #default="scope">
+                <el-tag :type="getMarginType(scope.row.margin)" size="small">
+                  {{ scope.row.margin }}%
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="note" label="備註" min-width="200"></el-table-column>
+            <el-table-column label="操作" width="140" align="center" fixed="right">
+              <template #default="scope">
+                <el-button size="small" @click="editRecord(scope.row)">
+                  <i class="fa-solid fa-edit"></i>
+                </el-button>
+                <el-button size="small" type="danger" @click="deleteRecord(scope.row)">
+                  <i class="fa-solid fa-trash"></i>
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增/編輯記錄對話框 -->
+    <el-dialog 
+      v-model="showRecordDialog" 
+      :title="dialogTitle"
+      width="500px">
+      <el-form :model="currentRecord" label-width="90px">
+        <el-form-item label="日期" required>
+          <el-date-picker
+            v-model="currentRecord.date"
+            type="date"
+            placeholder="選擇日期"
+            value-format="YYYY/MM/DD"
+            style="width: 100%;">
+          </el-date-picker>
+        </el-form-item>
+        <el-form-item label="收入" required>
+          <el-input-number 
+            v-model="currentRecord.revenue" 
+            :min="0"
+            :step="100"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="成本" required>
+          <el-input-number 
+            v-model="currentRecord.cost" 
+            :min="0"
+            :step="100"
+            style="width: 100%;">
+          </el-input-number>
+        </el-form-item>
+        <el-form-item label="備註">
+          <el-input 
+            v-model="currentRecord.note"
+            type="textarea"
+            :rows="3"
+            placeholder="輸入備註...">
+          </el-input>
+        </el-form-item>
+        <el-form-item label="計算結果">
+          <div class="calc-result">
+            <div>淨利：<strong style="color: #409EFF;">${{ calculateProfit().toLocaleString() }}</strong></div>
+            <div>利潤率：<strong style="color: #67c23a;">{{ calculateMargin() }}%</strong></div>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRecordDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveRecord">
+          <i class="fa-solid fa-check"></i> 確認
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const { createApp, ref, computed, nextTick, watch } = Vue
+
+    createApp({
+      setup() {
+        const reportDetails = ref([
+          { id: 1, date: '2025/10/01', revenue: 5000, cost: 3000, profit: 2000, margin: 40, note: '週一營業' },
+          { id: 2, date: '2025/10/03', revenue: 8000, cost: 4500, profit: 3500, margin: 44, note: '週三業績佳' },
+          { id: 3, date: '2025/10/05', revenue: 12000, cost: 7000, profit: 5000, margin: 42, note: '週末旺季' },
+          { id: 4, date: '2025/10/07', revenue: 15000, cost: 8500, profit: 6500, margin: 43, note: '大型維修案' },
+          { id: 5, date: '2025/10/10', revenue: 9000, cost: 5000, profit: 4000, margin: 44, note: '' },
+          { id: 6, date: '2025/10/12', revenue: 11000, cost: 6200, profit: 4800, margin: 44, note: '' },
+          { id: 7, date: '2025/10/15', revenue: 13500, cost: 7800, profit: 5700, margin: 42, note: '月中高峰' },
+        ])
+
+        const dateRange = ref(['2025-10', '2025-10'])
+        const searchKeyword = ref('')
+        const chartType = ref('all')
+        const showRecordDialog = ref(false)
+        const isEditing = ref(false)
+        const currentRecord = ref({
+          date: '',
+          revenue: 0,
+          cost: 0,
+          note: ''
+        })
+
+        // 統計摘要
+        const reportSummary = computed(() => {
+          const revenue = reportDetails.value.reduce((sum, r) => sum + r.revenue, 0)
+          const cost = reportDetails.value.reduce((sum, r) => sum + r.cost, 0)
+          const profit = revenue - cost
+          return { revenue, cost, profit }
+        })
+
+        // 利潤率
+        const profitMargin = computed(() => {
+          if (reportSummary.value.revenue === 0) return 0
+          return Math.round((reportSummary.value.profit / reportSummary.value.revenue) * 100)
+        })
+
+        // 篩選後的報表
+        const filteredReportDetails = computed(() => {
+          if (!searchKeyword.value) return reportDetails.value
+          return reportDetails.value.filter(r => 
+            r.date.includes(searchKeyword.value) || r.note.includes(searchKeyword.value)
+          )
+        })
+
+        // 對話框標題
+        const dialogTitle = computed(() => {
+          return isEditing.value ? '編輯記錄' : '新增記錄'
+        })
+
+        // Chart.js 實例
+        const dailyChartInstance = ref(null)
+        const costPieChartInstance = ref(null)
+
+        // 初始化折線圖
+        const initLineChart = () => {
+          nextTick(() => {
+            const ctx = document.getElementById('dailyChart')
+            if (!ctx) return
+            if (dailyChartInstance.value) dailyChartInstance.value.destroy()
+
+            const datasets = []
+            
+            if (chartType.value === 'revenue' || chartType.value === 'all') {
+              datasets.push({
+                label: '營收',
+                data: reportDetails.value.map(r => r.revenue),
+                borderColor: '#67c23a',
+                backgroundColor: 'rgba(103, 194, 58, 0.1)',
+                tension: 0.4,
+                fill: true
+              })
+            }
+            
+            if (chartType.value === 'cost' || chartType.value === 'all') {
+              datasets.push({
+                label: '成本',
+                data: reportDetails.value.map(r => r.cost),
+                borderColor: '#f56c6c',
+                backgroundColor: 'rgba(245, 108, 108, 0.1)',
+                tension: 0.4,
+                fill: true
+              })
+            }
+            
+            if (chartType.value === 'profit' || chartType.value === 'all') {
+              datasets.push({
+                label: '淨利',
+                data: reportDetails.value.map(r => r.profit),
+                borderColor: '#409EFF',
+                backgroundColor: 'rgba(64, 158, 255, 0.1)',
+                tension: 0.4,
+                fill: true
+              })
+            }
+
+            dailyChartInstance.value = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: reportDetails.value.map(r => r.date.slice(5)),
+                datasets: datasets
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                  legend: { 
+                    display: true,
+                    position: 'top'
+                  },
+                  tooltip: { 
+                    mode: 'index', 
+                    intersect: false 
+                  }
+                },
+                scales: {
+                  y: { 
+                    beginAtZero: true,
+                    ticks: {
+                      callback: function(value) {
+                        return '$' + value.toLocaleString()
+                      }
+                    }
+                  }
+                }
+              }
+            })
+          })
+        }
+
+        // 初始化圓餅圖
+        const initPieChart = () => {
+          nextTick(() => {
+            const ctx = document.getElementById('costPieChart')
+            if (!ctx) return
+            if (costPieChartInstance.value) costPieChartInstance.value.destroy()
+
+            costPieChartInstance.value = new Chart(ctx, {
+              type: 'doughnut',
+              data: {
+                labels: ['人事成本', '零件成本', '租金水電', '其他'],
+                datasets: [{
+                  data: [45, 35, 15, 5],
+                  backgroundColor: [
+                    '#409EFF',
+                    '#67c23a',
+                    '#e6a23c',
+                    '#f56c6c'
+                  ]
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                  legend: {
+                    position: 'bottom'
+                  }
+                }
+              }
+            })
+          })
+        }
+
+        // 初始化圖表
+        initLineChart()
+        initPieChart()
+
+        // 更新圖表
+        const updateChart = () => {
+          initLineChart()
+        }
+
+        // 利潤率類型
+        const getMarginType = (margin) => {
+          if (margin >= 40) return 'success'
+          if (margin >= 30) return 'warning'
+          return 'danger'
+        }
+
+        // 日期變更
+        const handleDateChange = (value) => {
+          console.log('日期範圍:', value)
+          ElementPlus.ElMessage.info('日期篩選功能開發中')
+        }
+
+        // 新增記錄
+        const addRecord = () => {
+          isEditing.value = false
+          const today = new Date()
+          currentRecord.value = {
+            date: `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`,
+            revenue: 0,
+            cost: 0,
+            note: ''
+          }
+          showRecordDialog.value = true
+        }
+
+        // 編輯記錄
+        const editRecord = (record) => {
+          isEditing.value = true
+          currentRecord.value = { ...record }
+          showRecordDialog.value = true
+        }
+
+        // 刪除記錄
+        const deleteRecord = (record) => {
+          ElementPlus.ElMessageBox.confirm(
+            `確定要刪除 ${record.date} 的記錄嗎？`,
+            '確認刪除',
+            {
+              confirmButtonText: '確定',
+              cancelButtonText: '取消',
+              type: 'warning',
+            }
+          ).then(() => {
+            const index = reportDetails.value.findIndex(r => r.id === record.id)
+            if (index !== -1) {
+              reportDetails.value.splice(index, 1)
+              ElementPlus.ElMessage.success('已刪除記錄')
+              updateChart()
+            }
+          }).catch(() => {})
+        }
+
+        // 計算淨利
+        const calculateProfit = () => {
+          return (currentRecord.value.revenue || 0) - (currentRecord.value.cost || 0)
+        }
+
+        // 計算利潤率
+        const calculateMargin = () => {
+          const revenue = currentRecord.value.revenue || 0
+          const profit = calculateProfit()
+          if (revenue === 0) return 0
+          return Math.round((profit / revenue) * 100)
+        }
+
+        // 儲存記錄
+        const saveRecord = () => {
+          const r = currentRecord.value
+          if (!r.date || r.revenue === 0) {
+            ElementPlus.ElMessage.warning('請填寫完整資料')
+            return
+          }
+
+          if (isEditing.value) {
+            const index = reportDetails.value.findIndex(item => item.id === r.id)
+            if (index !== -1) {
+              reportDetails.value[index] = {
+                ...r,
+                profit: calculateProfit(),
+                margin: calculateMargin()
+              }
+              ElementPlus.ElMessage.success('更新成功')
+            }
+          } else {
+            const newId = reportDetails.value.length > 0
+              ? Math.max(...reportDetails.value.map(r => r.id)) + 1
+              : 1
+            
+            reportDetails.value.push({
+              id: newId,
+              ...r,
+              profit: calculateProfit(),
+              margin: calculateMargin()
+            })
+            ElementPlus.ElMessage.success('新增成功')
+          }
+
+          showRecordDialog.value = false
+          updateChart()
+        }
+
+        // 匯出報表
+        const exportReport = () => {
+          ElementPlus.ElMessage.info('匯出功能開發中')
+        }
+
+        return {
+          reportDetails,
+          filteredReportDetails,
+          reportSummary,
+          profitMargin,
+          dateRange,
+          searchKeyword,
+          chartType,
+          showRecordDialog,
+          dialogTitle,
+          currentRecord,
+          updateChart,
+          getMarginType,
+          handleDateChange,
+          addRecord,
+          editRecord,
+          deleteRecord,
+          calculateProfit,
+          calculateMargin,
+          saveRecord,
+          exportReport
+        }
+      }
+    }).use(ElementPlus).mount('#app')
+  </script>
+
+  <style>
+/* 圖表控制 */
+.chart-controls {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.chart-wrapper {
+  position: relative;
+  height: 350px;
+  padding: 10px;
+}
+
+.chart-wrapper canvas {
+  max-height: 100%;
+}
+
+/* 收入來源列表 */
+.revenue-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.revenue-source-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.source-info {
+  flex: 1;
+}
+
+.source-label {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.source-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #409EFF;
+  min-width: 60px;
+  text-align: right;
+}
+
+/* 計算結果 */
+.calc-result {
+  background: #f5f7fa;
+  padding: 16px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-around;
+  font-size: 15px;
+}
+
+/* 響應式 */
+@media (max-width: 768px) {
+  .chart-wrapper {
+    height: 250px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .revenue-source-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .source-value {
+    align-self: flex-end;
+  }
+}
+  </style>
+</body>
+</html>
